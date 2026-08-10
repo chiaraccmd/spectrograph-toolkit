@@ -1,4 +1,4 @@
-# 🔧 Astrophotonics & Optical Design Toolkit
+# 🔧 Spectrograph Design Toolkit
 
 *A toolkit for astronomical instrumentation development, featuring spectrograph design, fibre optics analysis, and optical performance modelling. Developed for integral field spectrograph design and optimization.*
 
@@ -77,55 +77,6 @@ astrophotonics-toolkit/
 * **VPH Grating Design** — Efficiency calculations and Bragg condition optimization.
 * **Data Processing Utilities** — IFS datacube handling and spectral extraction.
 * **Additional Zemax Templates** — Multi-configuration analysis and tolerance tools.
-
----
-
-## 📋 Example Workflows
-
-### 1. Spectrograph Design & Optimization
-
-**Workflow:** Requirements → Parameter sweep → Geometric design → Diffraction analysis → Performance validation
-
-```matlab
-% Complete spectrograph analysis workflow
-[opt_params, ~] = spectrograph_parameter_sweep({'Y','J','H'});
-[metrics, geometry] = spectrograph_geometric_analysis();
-[transition, ~] = diffraction_limit_analysis();
-```
-
-### 2. Fibre System Analysis
-
-**Workflow:** Bundle geometry → Crosstalk simulation → Detector layout → Performance validation
-
-```matlab
-% Comprehensive crosstalk analysis
-[results, data] = fibre_crosstalk_simulator('all', 'fibre_separation', 25e-6);
-```
-
-### 3. Zemax–MATLAB Co-Design
-
-**Workflow:** MATLAB system sizing → Zemax optimization → Performance validation → Parameter refinement
-
----
-
-## 🎯 Applications
-
-* Astronomical spectrograph design — From conceptual sizing to detailed performance analysis
-* Integral Field Spectroscopy (IFS) systems — Fibre-fed spectrograph optimization
-* Cross-dispersed spectrometer design — Multi-band performance balancing
-* Optical performance modelling — Geometric vs diffraction-limited performance budgeting
-* Fibre-fed instrument development — Crosstalk analysis and bundle optimization
-
----
-
-## 🔬 Theory Background
-
-Tools are based on established physical principles:
-
-* **Geometrical optics** — Spectrograph layout and resolving power
-* **Fourier optics** — Diffraction analysis and PSF modelling
-* **Statistical optics** — Fibre crosstalk and signal analysis
-* **Grating theory** — Dispersion and resolution limits
 
 ---
 
