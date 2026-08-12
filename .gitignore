@@ -1,0 +1,41 @@
+# MATLAB generated files
+*.asv
+*.autosave
+*.m~
+*.mat
+
+# MATLAB code generation / cache
+slprj/
+codegen/
+
+# Zemax temporary and backup files
+*.ZDA
+*.BAK
+*.TMP
+*.SES
+
+# Raw experimental data
+*.tif
+*.tiff
+*.fits
+*.fit
+*.fts
+
+# Generated data
+*.csv
+
+# Generated figures
+*.fig
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.log
+*~
