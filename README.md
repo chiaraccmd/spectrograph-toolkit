@@ -347,29 +347,12 @@ The toolkit can be used for:
 
 ---
 
-## ⚠️ Scope & Assumptions
-
-The analytical tools use simplified first-order optical models.
-
-They are intended for:
-
-* conceptual design;
-* parameter exploration;
-* comparison of candidate configurations;
-* preliminary detector and grating selection.
-
-They are **not substitutes for complete optical modelling**.
-
-Final instrument performance should be validated through full optical simulation, tolerance analysis, and experimental measurements.
-
----
-
 ## 🔄 Planned Extensions
 
 * **VPH Grating Design** — Efficiency calculations and Bragg-condition optimization.
 * **Tolerance Analysis** — Sensitivity to manufacturing and alignment errors.
 * **Additional Zemax Tools** — Multi-configuration and automated optimization utilities.
-* 
+
 ---
 
 ## 📝 License
