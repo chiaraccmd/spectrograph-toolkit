@@ -111,7 +111,7 @@ function [results, data] = airy_crosstalk_analysis(params)
     %% Continuous PSF Analysis
     % =====================================================================
     % Airy PSF function definition
-    airy_psf_continuous = @(r, r0) (2 * besselj(1, 1.22 * pi * r / r0) ./ (1.22 * pi * r / r0)).^2;
+    airy_psf_continuous = @(u) airy_intensity(u);
     
     % Grid setup for continuous analysis
     fov = 100e-6 * params.M; % Field of view [m]
@@ -120,24 +120,26 @@ function [results, data] = airy_crosstalk_analysis(params)
     [X, Y] = meshgrid(x, x);
     
     % Apply anamorphism to radial coordinate
-    Rgrid = sqrt((X/params.anamorphism).^2 + Y.^2);
+    Rgrid = sqrt(X.^2 + (Y/params.anamorphism).^2);
     
-    % Airy radius calculation (worst-case at longest wavelength)
-    r0 = 1.22 * params.F2 * params.L_max_H;
+    % Airy first-zero radius at the requested analysis wavelength
+    r0 = 1.22 * params.F2 * params.wavelength;
     fprintf('Airy radius: r₀ = %.2f μm\n', r0*1e6);
     
     % Compute and normalize PSF
-    I_continuous = airy_psf_continuous(Rgrid, r0);
+    I_continuous = airy_psf_continuous(Rgrid / r0);
     I_continuous = I_continuous / sum(I_continuous(:));
     
     %% Crosstalk vs Distance Analysis
     % =====================================================================
-    d_steps = linspace(0, 30e-6, 100); % Separation sweep [m]
-    d_detector = d_steps * params.M * params.anamorphism; % Image plane separation
+    d_max = max(30e-6, 1.2 * params.fibre_separation);
+    d_steps = linspace(0, d_max, 100); % Separation sweep [m]
+    d_detector = d_steps * params.M; % Image plane separation
     
     crosstalk_continuous = zeros(size(d_detector));
     for k = 1:length(d_detector)
-        shifted_mask = sqrt((X - d_detector(k)).^2 + Y.^2) <= r0;
+        shifted_mask = ((X - d_detector(k))/r0).^2 + ...
+                       (Y/(r0*params.anamorphism)).^2 <= 1;
         crosstalk_continuous(k) = sum(I_continuous(shifted_mask));
     end
     
@@ -146,15 +148,14 @@ function [results, data] = airy_crosstalk_analysis(params)
     fprintf('Performing pixel-integrated analysis...\n');
     
     % Create function handle for pixel integration
-    airy_psf_pixel = @(r) (2 * besselj(1, pi * r) ./ (pi * r)).^2;
-    airy_psf_pixel(0); % Initialize function handle
+    airy_psf_pixel = @(u) airy_intensity(u);
     
-    [crosstalk_pixel, I_pixel, x_pixel, y_pixel] = pixel_integrated_analysis(...
+    [crosstalk_pixel, pixel_d_steps, I_pixel, x_pixel, y_pixel] = pixel_integrated_analysis(...
         params, airy_psf_pixel, 'airy', r0);
     
     %% Key Distance Analysis
     % =====================================================================
-    key_separation = params.fibre_separation * params.M * params.anamorphism;
+    key_separation = params.fibre_separation * params.M;
     [~, idx] = min(abs(d_detector - key_separation));
     crosstalk_at_key = crosstalk_continuous(idx) * 100;
     
@@ -163,7 +164,7 @@ function [results, data] = airy_crosstalk_analysis(params)
     
     %% Visualization
     % =====================================================================
-    if params.fibre_separation <= 30e-6
+    if params.fibre_separation <= d_max
         fig_airy = visualize_airy_analysis(params, I_continuous, x, ...
             crosstalk_continuous, d_steps, key_separation, crosstalk_at_key, r0);
         data.figures.airy_continuous = fig_airy;
@@ -178,7 +179,7 @@ function [results, data] = airy_crosstalk_analysis(params)
         'key_separation_crosstalk', crosstalk_at_key);
     
     results.pixel_integrated = struct(...
-        'separations', d_steps, ...
+        'separations', pixel_d_steps, ...
         'crosstalk_percent', crosstalk_pixel * 100);
     
     data.psf_continuous = I_continuous;
@@ -206,8 +207,8 @@ function [results, data] = gaussian_crosstalk_analysis(params)
     [X, Y] = meshgrid(x, x);
     
     %% Beam Parameter Calculation
-    wx = calc_waist(params.wavelength) * params.anamorphism; % Spectral direction
-    wy = calc_waist(params.wavelength);                      % Spatial direction
+    wx = calc_waist(params.wavelength);                      % Spatial direction
+    wy = calc_waist(params.wavelength) * params.anamorphism; % Spectral direction
     
     fprintf('Gaussian waists: wx = %.2f μm, wy = %.2f μm\n', wx*1e6, wy*1e6);
     
@@ -216,18 +217,19 @@ function [results, data] = gaussian_crosstalk_analysis(params)
     I_gaussian = I_gaussian / sum(I_gaussian(:));
     
     %% Crosstalk vs Distance
-    d_steps = linspace(0, 30e-6, 50);
-    d_detector = d_steps * params.M * params.anamorphism;
+    d_max = max(30e-6, 1.2 * params.fibre_separation);
+    d_steps = linspace(0, d_max, 50);
+    d_detector = d_steps * params.M;
     
     crosstalk_gaussian = zeros(size(d_detector));
     for k = 1:length(d_detector)
-        shifted_mask = ((X - d_detector(k)).^2/((wx*params.anamorphism)^2) + ...
+        shifted_mask = ((X - d_detector(k)).^2/(wx^2) + ...
                        Y.^2/(wy^2)) <= 1;
         crosstalk_gaussian(k) = sum(I_gaussian(shifted_mask));
     end
     
     %% Key Separation Analysis
-    key_separation = params.fibre_separation * params.M * params.anamorphism;
+    key_separation = params.fibre_separation * params.M;
     [~, idx] = min(abs(d_detector - key_separation));
     crosstalk_at_key = crosstalk_gaussian(idx) * 100;
     
@@ -235,7 +237,7 @@ function [results, data] = gaussian_crosstalk_analysis(params)
         params.fibre_separation*1e6, crosstalk_at_key);
     
     %% Visualization
-    if params.fibre_separation <= 30e-6
+    if params.fibre_separation <= d_max
         fig_gaussian = visualize_gaussian_analysis(params, I_gaussian, x, ...
             crosstalk_gaussian, d_steps, key_separation, crosstalk_at_key, wx, wy);
         data.figures.gaussian = fig_gaussian;
@@ -261,7 +263,7 @@ function [results, data] = dispersed_crosstalk_analysis(params)
     fprintf('\n--- Dispersed Spectrum Crosstalk Analysis ---\n');
     
     % Airy PSF function
-    airy_psf = @(r) (2 * besselj(1, pi * r) ./ (pi * r)).^2;
+    airy_psf = @(u) airy_intensity(u);
     
     %% Spectral Dispersion Calculation
     % =====================================================================
@@ -270,7 +272,7 @@ function [results, data] = dispersed_crosstalk_analysis(params)
     % Diffraction angles and spectral positions
     beta = asin(params.grating_density * lambda_samples - sin(params.incidence_angle));
     beta_0 = asin(params.grating_density * mean(lambda_samples) - sin(params.incidence_angle));
-    y_pos = params.camera_focal_length * tan(beta - beta_0); % Spectral positions
+    y_pos = params.camera_focal_length * (tan(beta) - tan(beta_0)); % Spectral positions
     
     fprintf('Spectral range: %.1f-%.1f nm (%d samples)\n', ...
         min(lambda_samples)*1e9, max(lambda_samples)*1e9, length(lambda_samples));
@@ -287,7 +289,7 @@ function [results, data] = dispersed_crosstalk_analysis(params)
     
     for i = 1:length(lambda_samples)
         r0_values(i) = 1.22 * params.F2 * lambda_samples(i);
-        R = sqrt((X/params.anamorphism).^2 + (Y - y_pos(i)).^2);
+        R = sqrt(X.^2 + ((Y - y_pos(i))/params.anamorphism).^2);
         PSF_stack(:,:,i) = airy_psf(R / r0_values(i)); % Normalized argument
         PSF_stack(:,:,i) = PSF_stack(:,:,i) / sum(PSF_stack(:,:,i), 'all');
     end
@@ -297,7 +299,8 @@ function [results, data] = dispersed_crosstalk_analysis(params)
     combined_psf = sum(PSF_stack, 3);
     combined_psf = combined_psf / sum(combined_psf(:));
     
-    d_steps = linspace(0, 30e-6, 20);
+    d_max = max(30e-6, 1.2 * params.fibre_separation);
+    d_steps = linspace(0, d_max, 20);
     d_detector = d_steps * params.M;
     crosstalk_dispersed = zeros(size(d_detector));
     
@@ -306,10 +309,10 @@ function [results, data] = dispersed_crosstalk_analysis(params)
         leaked_flux = 0;
         
         for i = 1:length(lambda_samples)
-            R_original = sqrt((X/params.anamorphism).^2 + (Y - y_pos(i)).^2);
-            mask_original = R_original <= r0_values(i);
+            R_original = sqrt(X.^2 + ((Y - y_pos(i))/params.anamorphism).^2);
             
-            R_shifted = sqrt(((X/params.anamorphism - d_detector(k))).^2 + (Y - y_pos(i)).^2);
+            R_shifted = sqrt((X - d_detector(k)).^2 + ...
+                             ((Y - y_pos(i))/params.anamorphism).^2);
             mask_shifted = R_shifted <= r0_values(i);
             
             original_flux = sum(PSF_stack(:,:,i), 'all');
@@ -322,11 +325,11 @@ function [results, data] = dispersed_crosstalk_analysis(params)
     
     %% Pixel-Integrated Analysis
     % =====================================================================
-    [crosstalk_pixel, I_pixel, x_pixel, y_pixel] = pixel_integrated_dispersed_analysis(...
+    [crosstalk_pixel, pixel_d_steps, I_pixel, x_pixel, y_pixel] = pixel_integrated_dispersed_analysis(...
         params, lambda_samples, y_pos, r0_values);
     
     %% Key Separation Results
-    key_separation = params.fibre_separation * params.M * params.anamorphism;
+    key_separation = params.fibre_separation * params.M;
     [~, idx] = min(abs(d_detector - key_separation));
     crosstalk_at_key = crosstalk_dispersed(idx) * 100;
     
@@ -335,7 +338,8 @@ function [results, data] = dispersed_crosstalk_analysis(params)
     
     %% Visualization
     fig_dispersed = visualize_dispersed_analysis(params, combined_psf, x, y, ...
-        y_pos, r0_values, lambda_samples, key_separation, crosstalk_at_key);
+        y_pos, r0_values, lambda_samples, key_separation, crosstalk_at_key, ...
+        d_steps, crosstalk_dispersed);
     data.figures.dispersed = fig_dispersed;
     
     %% Prepare Outputs
@@ -345,7 +349,7 @@ function [results, data] = dispersed_crosstalk_analysis(params)
         'key_separation_crosstalk', crosstalk_at_key);
     
     results.pixel_integrated = struct(...
-        'separations', d_steps, ...
+        'separations', pixel_d_steps, ...
         'crosstalk_percent', crosstalk_pixel * 100);
     
     data.psf_stack = PSF_stack;
@@ -359,133 +363,115 @@ end
 
 %% Pixel Integration Core Function
 % =========================================================================
-function [crosstalk_pixel, I_pixel, x_pixel, y_pixel] = pixel_integrated_analysis(params, psf_function, model_type, r0)
+function [crosstalk_pixel, d_steps, I_pixel, x_pixel, y_pixel] = pixel_integrated_analysis(params, psf_function, model_type, r0)
 % PIXEL_INTEGRATED_ANALYSIS - Account for detector pixelation effects
 
-    %% Subsampled Grid Setup
     fov = params.fov_pixels * params.pixel_size;
-    N_subsampled = params.fov_pixels * params.subsampling_factor;
-    dx_subsampled = fov / N_subsampled;
-    
-    x_subsampled = linspace(-fov/2, fov/2, N_subsampled);
+    n_sub = params.fov_pixels * params.subsampling_factor;
+    d_sub = params.pixel_size / params.subsampling_factor;
+
+    x_subsampled = ((0:n_sub-1) + 0.5) * d_sub - fov/2;
     [X_subs, Y_subs] = meshgrid(x_subsampled, x_subsampled);
-    
-    %% PSF Generation on Subsampled Grid
+
     switch model_type
         case 'airy'
-            % Use normalized radial coordinate for Airy PSF
-            R_subs = sqrt((X_subs/params.anamorphism).^2 + Y_subs.^2) / r0;
+            R_subs = sqrt(X_subs.^2 + (Y_subs/params.anamorphism).^2) / r0;
             I_subsampled = psf_function(R_subs);
-            
         case 'gaussian'
-            % Gaussian model uses different approach
             calc_waist = @(lambda) (params.MFD_1310/2) * params.M * (lambda/params.lambda_ref);
-            wx = calc_waist(params.wavelength) * params.anamorphism;
-            wy = calc_waist(params.wavelength);
+            wx = calc_waist(params.wavelength);
+            wy = calc_waist(params.wavelength) * params.anamorphism;
             I_subsampled = exp(-2*(X_subs.^2/wx^2 + Y_subs.^2/wy^2));
     end
-    
+
     I_subsampled = I_subsampled / sum(I_subsampled(:));
-    
-    %% Pixel Response Convolution
-    pixel_size_subsampled = round(params.pixel_size / dx_subsampled);
-    kernel_x = round(pixel_size_subsampled * params.anamorphism);
-    kernel_y = pixel_size_subsampled;
-    pixel_kernel = ones(kernel_y, kernel_x) / (kernel_x * kernel_y);
-    
-    I_conv = conv2(I_subsampled, pixel_kernel, 'same');
-    
-    %% Downsampling to Detector Resolution
-    I_pixel = zeros(params.fov_pixels);
+
+    I_pixel = zeros(params.fov_pixels, params.fov_pixels);
+    q = params.subsampling_factor;
     for i = 1:params.fov_pixels
         for j = 1:params.fov_pixels
-            idx_x = (i-1)*params.subsampling_factor + 1 : i*params.subsampling_factor;
-            idx_y = (j-1)*params.subsampling_factor + 1 : j*params.subsampling_factor;
-            I_pixel(j,i) = mean(mean(I_conv(idx_y, idx_x)));
+            idx_x = (i-1)*q + 1 : i*q;
+            idx_y = (j-1)*q + 1 : j*q;
+            I_pixel(j,i) = sum(I_subsampled(idx_y, idx_x), 'all');
         end
     end
     I_pixel = I_pixel / sum(I_pixel(:));
-    
-    %% Pixel Grid Coordinates
-    x_pixel = linspace(-fov/2, fov/2, params.fov_pixels);
+
+    x_pixel = ((0:params.fov_pixels-1) + 0.5) * params.pixel_size - fov/2;
     y_pixel = x_pixel;
-    
-    %% Crosstalk Calculation
-    d_steps = linspace(0, 30e-6, 30);
+
+    d_max = max(30e-6, 1.2 * params.fibre_separation);
+    d_steps = linspace(0, d_max, 30);
     d_detector = d_steps * params.M;
     crosstalk_pixel = zeros(size(d_detector));
-    
+
     [X_pixel, Y_pixel] = meshgrid(x_pixel, y_pixel);
-    
     for k = 1:length(d_detector)
-        shifted_mask = ((X_pixel - d_detector(k))/(r0*params.anamorphism)).^2 + ...
-                      (Y_pixel/r0).^2 <= 1;
+        shifted_mask = ((X_pixel - d_detector(k))/r0).^2 + ...
+                       (Y_pixel/(r0*params.anamorphism)).^2 <= 1;
         crosstalk_pixel(k) = sum(I_pixel(shifted_mask), 'all');
     end
 end
 
 %% Dispersed Pixel Integration
 % =========================================================================
-function [crosstalk_pixel, I_pixel, x_pixel, y_pixel] = pixel_integrated_dispersed_analysis(...
+function [crosstalk_pixel, d_steps, I_pixel, x_pixel, y_pixel] = pixel_integrated_dispersed_analysis(...
     params, lambda_samples, y_pos, r0_values)
 % PIXEL_INTEGRATED_DISPERSED_ANALYSIS - Pixel integration for dispersed spectra
 
-    % Airy PSF definition
-    airy_psf = @(r) (2 * besselj(1, pi * r) ./ (pi * r)).^2;
-    
-    fov = params.fov_pixels * params.pixel_size;
-    N_subsampled = params.fov_pixels * params.subsampling_factor;
-    dx_subsampled = fov / N_subsampled;
-    
-    x_subsampled = linspace(-fov/2, fov/2, N_subsampled);
-    y_subsampled = linspace(min(y_pos)-10e-6, max(y_pos)+10e-6, N_subsampled);
+    q = params.subsampling_factor;
+    nx_pixel = params.fov_pixels;
+    x_span = nx_pixel * params.pixel_size;
+    nx_sub = nx_pixel * q;
+    dx = params.pixel_size / q;
+    x_subsampled = ((0:nx_sub-1) + 0.5) * dx - x_span/2;
+
+    margin = max(2 * max(r0_values) * params.anamorphism, 2 * params.pixel_size);
+    y_min = min(y_pos) - margin;
+    y_max = max(y_pos) + margin;
+    ny_pixel = ceil((y_max - y_min) / params.pixel_size);
+    y_span = ny_pixel * params.pixel_size;
+    y_center = (y_min + y_max) / 2;
+    ny_sub = ny_pixel * q;
+    dy = params.pixel_size / q;
+    y_subsampled = ((0:ny_sub-1) + 0.5) * dy - y_span/2 + y_center;
+
     [X_subs, Y_subs] = meshgrid(x_subsampled, y_subsampled);
-    
-    %% Multi-Wavelength PSF Generation
-    PSF_stack_subsampled = zeros(N_subsampled, N_subsampled, length(lambda_samples));
-    
+    combined_psf_subsampled = zeros(ny_sub, nx_sub);
+
     for i = 1:length(lambda_samples)
-        R_ellip = sqrt((X_subs/(r0_values(i)*params.anamorphism)).^2 + ...
-                      ((Y_subs - y_pos(i))/r0_values(i)).^2);
-        PSF = airy_psf(R_ellip);
-        PSF_stack_subsampled(:,:,i) = PSF / sum(PSF(:));
+        R_ellip = sqrt((X_subs/r0_values(i)).^2 + ...
+                       ((Y_subs - y_pos(i))/(r0_values(i)*params.anamorphism)).^2);
+        PSF = airy_intensity(R_ellip);
+        PSF = PSF / sum(PSF(:));
+        combined_psf_subsampled = combined_psf_subsampled + PSF;
     end
-    
-    combined_psf_subsampled = sum(PSF_stack_subsampled, 3);
     combined_psf_subsampled = combined_psf_subsampled / sum(combined_psf_subsampled(:));
-    
-    %% Pixel Convolution and Downsampling
-    pixel_size_subsampled = round(params.pixel_size / dx_subsampled);
-    kernel_x = round(pixel_size_subsampled * params.anamorphism);
-    kernel_y = pixel_size_subsampled;
-    pixel_kernel = ones(kernel_y, kernel_x) / (kernel_x * kernel_y);
-    
-    I_conv = conv2(combined_psf_subsampled, pixel_kernel, 'same');
-    
-    I_pixel = zeros(params.fov_pixels, params.fov_pixels);
-    for i = 1:params.fov_pixels
-        for j = 1:params.fov_pixels
-            idx_x = (i-1)*params.subsampling_factor + 1 : i*params.subsampling_factor;
-            idx_y = (j-1)*params.subsampling_factor + 1 : j*params.subsampling_factor;
-            I_pixel(j,i) = mean(mean(I_conv(idx_y, idx_x)));
+
+    I_pixel = zeros(ny_pixel, nx_pixel);
+    for i = 1:nx_pixel
+        for j = 1:ny_pixel
+            idx_x = (i-1)*q + 1 : i*q;
+            idx_y = (j-1)*q + 1 : j*q;
+            I_pixel(j,i) = sum(combined_psf_subsampled(idx_y, idx_x), 'all');
         end
     end
     I_pixel = I_pixel / sum(I_pixel(:));
-    
-    %% Pixel Grid and Crosstalk Calculation
-    x_pixel = linspace(-fov/2, fov/2, params.fov_pixels);
-    y_pixel = linspace(min(y_pos)-10e-6, max(y_pos)+10e-6, params.fov_pixels);
+
+    x_pixel = ((0:nx_pixel-1) + 0.5) * params.pixel_size - x_span/2;
+    y_pixel = ((0:ny_pixel-1) + 0.5) * params.pixel_size - y_span/2 + y_center;
     [X_pixel, Y_pixel] = meshgrid(x_pixel, y_pixel);
-    
-    d_steps = linspace(0, 30e-6, 30);
+
+    d_max = max(30e-6, 1.2 * params.fibre_separation);
+    d_steps = linspace(0, d_max, 30);
     d_detector = d_steps * params.M;
     crosstalk_pixel = zeros(size(d_detector));
-    
+
     for k = 1:length(d_detector)
         shifted_mask = false(size(X_pixel));
         for i = 1:length(lambda_samples)
-            mask_i = ((X_pixel - d_detector(k))/(r0_values(i)*params.anamorphism)).^2 + ...
-                    ((Y_pixel - y_pos(i))/r0_values(i)).^2 <= 1;
+            mask_i = ((X_pixel - d_detector(k))/r0_values(i)).^2 + ...
+                     ((Y_pixel - y_pos(i))/(r0_values(i)*params.anamorphism)).^2 <= 1;
             shifted_mask = shifted_mask | mask_i;
         end
         crosstalk_pixel(k) = sum(I_pixel(shifted_mask), 'all');
@@ -515,12 +501,12 @@ function fig = visualize_airy_analysis(params, I_continuous, x, crosstalk, d_ste
     end
     
     % Airy disk and fibre annotations
-    rectangle('Position', [-r0*1e6*params.anamorphism, -r0*1e6, ...
-                          2*r0*1e6*params.anamorphism, 2*r0*1e6], ...
+    rectangle('Position', [-r0*1e6, -r0*1e6*params.anamorphism, ...
+                          2*r0*1e6, 2*r0*1e6*params.anamorphism], ...
               'Curvature', [1, 1], 'EdgeColor', 'b', 'LineWidth', 1.5);
     
-    rectangle('Position', [key_sep*1e6 - r0*1e6*params.anamorphism, -r0*1e6, ...
-                          2*r0*1e6*params.anamorphism, 2*r0*1e6], ...
+    rectangle('Position', [key_sep*1e6 - r0*1e6, -r0*1e6*params.anamorphism, ...
+                          2*r0*1e6, 2*r0*1e6*params.anamorphism], ...
               'Curvature', [1, 1], 'EdgeColor', 'g', 'LineWidth', 1.5);
     
     title('Airy PSF and Fibre Overlap');
@@ -572,12 +558,12 @@ function fig = visualize_gaussian_analysis(params, I_gaussian, x, crosstalk, d_s
     
     % Fibre core positions
     fibre_radius = params.fibre_radius_detector;
-    rectangle('Position', [-fibre_radius*params.anamorphism*1e6, -fibre_radius*1e6, ...
-                          2*fibre_radius*params.anamorphism*1e6, 2*fibre_radius*1e6], ...
+    rectangle('Position', [-fibre_radius*1e6, -fibre_radius*params.anamorphism*1e6, ...
+                          2*fibre_radius*1e6, 2*fibre_radius*params.anamorphism*1e6], ...
               'Curvature', [1, 1], 'EdgeColor', 'b', 'LineWidth', 1, 'LineStyle', '--');
     
-    rectangle('Position', [key_sep*1e6 - fibre_radius*params.anamorphism*1e6, -fibre_radius*1e6, ...
-                          2*fibre_radius*params.anamorphism*1e6, 2*fibre_radius*1e6], ...
+    rectangle('Position', [key_sep*1e6 - fibre_radius*1e6, -fibre_radius*params.anamorphism*1e6, ...
+                          2*fibre_radius*1e6, 2*fibre_radius*params.anamorphism*1e6], ...
               'Curvature', [1, 1], 'EdgeColor', 'g', 'LineWidth', 1, 'LineStyle', '--');
     
     title('Gaussian PSF and Beam Overlap');
@@ -610,7 +596,7 @@ function fig = visualize_gaussian_analysis(params, I_gaussian, x, crosstalk, d_s
     end
 end
 
-function fig = visualize_dispersed_analysis(params, combined_psf, x, y, y_pos, r0_values, lambda_samples, key_sep, crosstalk_pct)
+function fig = visualize_dispersed_analysis(params, combined_psf, x, y, y_pos, r0_values, lambda_samples, key_sep, crosstalk_pct, d_steps, crosstalk)
     fig = figure('Name', 'Dispersed Spectrum Crosstalk', 'Position', [100, 100, 1200, 800]);
     
     % Main PSF visualization
@@ -632,15 +618,15 @@ function fig = visualize_dispersed_analysis(params, combined_psf, x, y, y_pos, r
     
     % Spectral PSF positions - original fibres (blue)
     for i = 1:length(lambda_samples)
-        rectangle('Position', [-r0_values(i)*params.anamorphism*1e6, (y_pos(i)-r0_values(i))*1e6, ...
-                              2*r0_values(i)*params.anamorphism*1e6, 2*r0_values(i)*1e6], ...
+        rectangle('Position', [-r0_values(i)*1e6, (y_pos(i)-r0_values(i)*params.anamorphism)*1e6, ...
+                              2*r0_values(i)*1e6, 2*r0_values(i)*params.anamorphism*1e6], ...
                   'EdgeColor', 'b', 'LineWidth', 0.5);
     end
     
     % Spectral PSF positions - shifted fibres (green)
     for i = 1:length(lambda_samples)
-        rectangle('Position', [key_sep*1e6 - r0_values(i)*params.anamorphism*1e6, (y_pos(i)-r0_values(i))*1e6, ...
-                              2*r0_values(i)*params.anamorphism*1e6, 2*r0_values(i)*1e6], ...
+        rectangle('Position', [key_sep*1e6 - r0_values(i)*1e6, (y_pos(i)-r0_values(i)*params.anamorphism)*1e6, ...
+                              2*r0_values(i)*1e6, 2*r0_values(i)*params.anamorphism*1e6], ...
                   'EdgeColor', 'g', 'LineWidth', 0.5);
     end
     
@@ -649,22 +635,21 @@ function fig = visualize_dispersed_analysis(params, combined_psf, x, y, y_pos, r
     
     % Spectral dispersion plot
     subplot(2, 2, 2);
-    plot(lambda_samples*1e9, y_pos*1e6, 'o-', 'LineWidth', 2, 'MarkerSize', 4);
+    plot(lambda_samples*1e9, y_pos*1e6, '-', 'LineWidth', 2);
+    hold on;
+    plot(lambda_samples(display_idx)*1e9, y_pos(display_idx)*1e6, ...
+         'o', 'MarkerSize', 5, 'LineWidth', 1.2);
+    hold off;
     xlabel('Wavelength [nm]'); ylabel('Spectral Position [μm]');
     title('Spectral Dispersion'); grid on;
     
     % Crosstalk curve
     subplot(2, 2, 4);
-    d_steps = linspace(0, 30e-6, 20);
-    d_detector = d_steps * params.M;
-    
-    % Calculate approximate crosstalk for display (simplified)
-    crosstalk_approx = exp(-2*(d_steps*1e6).^2 / (mean(r0_values)*1e6).^2) * 100;
-    plot(d_steps*1e6, crosstalk_approx, 'LineWidth', 2);
+    plot(d_steps*1e6, crosstalk*100, 'LineWidth', 2);
     xline(params.fibre_separation*1e6, 'r--', 'LineWidth', 1.5, ...
           'Label', sprintf('Design: %.3f%%', crosstalk_pct));
     xlabel('Fibre Separation [μm]'); ylabel('Crosstalk [%]');
-    title('Approximate Crosstalk vs Separation'); grid on;
+    title('Crosstalk vs Separation'); grid on;
 end
 
 %% Model Comparison Function
@@ -686,16 +671,29 @@ function comparison = compare_crosstalk_models(crosstalk_results, params)
     fprintf('  Gaussian model: %.3f%%\n', gaussian_val);
     fprintf('  Dispersed model: %.3f%%\n', dispersed_val);
     
+    vals = [airy_val, gaussian_val, dispersed_val];
+    mean_val = mean(vals);
+    if mean_val > 0
+        relative_spread = std(vals) / mean_val;
+    else
+        relative_spread = NaN;
+    end
+
     comparison = struct(...
         'design_separation', design_sep, ...
         'airy_crosstalk', airy_val, ...
         'gaussian_crosstalk', gaussian_val, ...
         'dispersed_crosstalk', dispersed_val, ...
-        'model_agreement', std([airy_val, gaussian_val, dispersed_val]) / mean([airy_val, gaussian_val, dispersed_val]));
-    
-    if comparison.model_agreement < 0.1
-        fprintf('✓ Good model agreement (variation < 10%%)\n');
-    else
-        fprintf('⚠ Model variations > 10%%, consider experimental validation\n');
-    end
+        'relative_model_spread', relative_spread);
+
+    fprintf('Relative spread between model-specific leakage metrics: %.1f%%\n', ...
+        100 * relative_spread);
+end
+
+function I = airy_intensity(u)
+% AIRY_INTENSITY - Airy intensity with u normalized to the first-zero radius
+    z = 1.22 * pi * u;
+    I = ones(size(z));
+    nz = abs(z) > 1e-12;
+    I(nz) = (2 * besselj(1, z(nz)) ./ z(nz)).^2;
 end
