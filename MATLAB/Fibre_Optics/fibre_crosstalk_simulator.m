@@ -9,7 +9,7 @@ function [crosstalk_results, analysis_data] = fibre_crosstalk_simulator(model_ty
 %
 % Physical principles:
 % - Fourier optics and diffraction theory
-% - Gaussian beam propagation
+% - Gaussian beam propagationp
 % - Grating dispersion and spectral imaging
 % - Detector sampling and pixel integration
 %
@@ -509,7 +509,17 @@ function fig = visualize_airy_analysis(params, I_continuous, x, crosstalk, d_ste
                           2*r0*1e6, 2*r0*1e6*params.anamorphism], ...
               'Curvature', [1, 1], 'EdgeColor', 'g', 'LineWidth', 1.5);
     
-    title('Airy PSF and Fibre Overlap');
+        % Fibre core positions
+    fibre_radius = params.fibre_radius_detector;
+    rectangle('Position', [-fibre_radius*1e6, -fibre_radius*params.anamorphism*1e6, ...
+                          2*fibre_radius*1e6, 2*fibre_radius*params.anamorphism*1e6], ...
+              'Curvature', [1, 1], 'EdgeColor', 'b', 'LineWidth', 1, 'LineStyle', '--');
+
+    rectangle('Position', [key_sep*1e6 - fibre_radius*1e6, -fibre_radius*params.anamorphism*1e6, ...
+                          2*fibre_radius*1e6, 2*fibre_radius*params.anamorphism*1e6], ...
+              'Curvature', [1, 1], 'EdgeColor', 'g', 'LineWidth', 1, 'LineStyle', '--');
+
+title('Airy PSF and Fibre Overlap');
     xlabel('Spatial Direction [μm]'); ylabel('Spectral Direction [μm]');
     
     % Crosstalk curve
@@ -596,60 +606,237 @@ function fig = visualize_gaussian_analysis(params, I_gaussian, x, crosstalk, d_s
     end
 end
 
-function fig = visualize_dispersed_analysis(params, combined_psf, x, y, y_pos, r0_values, lambda_samples, key_sep, crosstalk_pct, d_steps, crosstalk)
-    fig = figure('Name', 'Dispersed Spectrum Crosstalk', 'Position', [100, 100, 1200, 800]);
-    
-    % Main PSF visualization
+function fig = visualize_dispersed_analysis(params, combined_psf, x, y, ...
+    y_pos, r0_values, lambda_samples, key_sep, crosstalk_pct, ...
+    d_steps, crosstalk)
+
+    fig = figure('Name', 'Dispersed Spectrum Crosstalk', ...
+        'Position', [100, 100, 1200, 800]);
+
+    %% Visualization wavelength range
+    % The full spectral band is still used for the crosstalk calculation.
+    % Only a narrower interval around the central wavelength is displayed
+    % in the main PSF panel so that the PSF structure remains visible.
+
+    lambda_c = mean(lambda_samples);
+
+    % Width of wavelength interval displayed in the PSF panel
+    plot_bandwidth = 5e-9;
+
+    lambda_plot_min = lambda_c - plot_bandwidth/2;
+    lambda_plot_max = lambda_c + plot_bandwidth/2;
+
+    % Convert displayed wavelength limits into detector positions
+    beta_c = asin(params.grating_density * lambda_c ...
+        - sin(params.incidence_angle));
+
+    beta_plot_min = asin(params.grating_density * lambda_plot_min ...
+        - sin(params.incidence_angle));
+
+    beta_plot_max = asin(params.grating_density * lambda_plot_max ...
+        - sin(params.incidence_angle));
+
+    y_plot_min = params.camera_focal_length * ...
+        (tan(beta_plot_min) - tan(beta_c));
+
+    y_plot_max = params.camera_focal_length * ...
+        (tan(beta_plot_max) - tan(beta_c));
+
+    % Add a margin around the displayed spectral region
+    plot_margin = 3 * max(r0_values) * params.anamorphism;
+
+    y_lim_plot = sort([y_plot_min, y_plot_max]) + ...
+        [-plot_margin, plot_margin];
+
+
+    %% Main dispersed PSF visualization
+
     subplot(2, 2, [1, 3]);
-    imagesc(x*1e6, y*1e6, log10(combined_psf + 1e-10));
-    colormap hot; colorbar;
-    caxis([-7.5, 0]);
-    axis image; hold on;
-    
-    % Add pixel grid
-    pixel_size_um = params.pixel_size * 1e6;
-    x_range = xlim(); y_range = ylim();
-    for x_line = x_range(1):pixel_size_um:x_range(2)
-        plot([x_line, x_line], y_range, 'Color', [0.7, 0.7, 0.7, 0.5], 'LineWidth', 0.5);
-    end
-    for y_line = y_range(1):pixel_size_um:y_range(2)
-        plot(x_range, [y_line, y_line], 'Color', [0.7, 0.7, 0.7, 0.5], 'LineWidth', 0.5);
-    end
-    
-    % Spectral PSF positions - original fibres (blue)
-    for i = 1:length(lambda_samples)
-        rectangle('Position', [-r0_values(i)*1e6, (y_pos(i)-r0_values(i)*params.anamorphism)*1e6, ...
-                              2*r0_values(i)*1e6, 2*r0_values(i)*params.anamorphism*1e6], ...
-                  'EdgeColor', 'b', 'LineWidth', 0.5);
-    end
-    
-    % Spectral PSF positions - shifted fibres (green)
-    for i = 1:length(lambda_samples)
-        rectangle('Position', [key_sep*1e6 - r0_values(i)*1e6, (y_pos(i)-r0_values(i)*params.anamorphism)*1e6, ...
-                              2*r0_values(i)*1e6, 2*r0_values(i)*params.anamorphism*1e6], ...
-                  'EdgeColor', 'g', 'LineWidth', 0.5);
-    end
-    
-    title('Dispersed Spectrum PSF Distribution');
-    xlabel('Spatial Direction [μm]'); ylabel('Spectral Direction [μm]');
-    
-    % Spectral dispersion plot
-    subplot(2, 2, 2);
-    plot(lambda_samples*1e9, y_pos*1e6, '-', 'LineWidth', 2);
+
+    % Normalize to peak intensity for visualization
+    psf_display = combined_psf / max(combined_psf(:));
+
+    imagesc(x*1e6, y*1e6, log10(psf_display + 1e-10));
+
+    colormap hot;
+    colorbar;
+
+    % Dynamic range shown in log10(I/Imax)
+    caxis([-6, 0]);
+
     hold on;
-    plot(lambda_samples(display_idx)*1e9, y_pos(display_idx)*1e6, ...
-         'o', 'MarkerSize', 5, 'LineWidth', 1.2);
-    hold off;
-    xlabel('Wavelength [nm]'); ylabel('Spectral Position [μm]');
-    title('Spectral Dispersion'); grid on;
-    
-    % Crosstalk curve
+
+    % Do not use axis image here:
+    % spectral extent is much larger than the spatial extent.
+    axis xy;
+
+    % Zoom to the central wavelength interval
+    ylim(y_lim_plot * 1e6);
+
+    x_range = xlim();
+    y_range = ylim();
+
+
+    %% Detector pixel grid
+
+    pixel_size_um = params.pixel_size * 1e6;
+
+    for x_line = x_range(1):pixel_size_um:x_range(2)
+        plot([x_line, x_line], y_range, ...
+            'Color', [0.7, 0.7, 0.7, 0.35], ...
+            'LineWidth', 0.5);
+    end
+
+    for y_line = ...
+            ceil(y_range(1)/pixel_size_um)*pixel_size_um : ...
+            pixel_size_um : ...
+            y_range(2)
+
+        plot(x_range, [y_line, y_line], ...
+            'Color', [0.7, 0.7, 0.7, 0.35], ...
+            'LineWidth', 0.5);
+    end
+
+
+    %% Representative Airy footprints
+
+    % Select only wavelengths that fall inside the displayed interval
+    plot_idx = find(lambda_samples >= lambda_plot_min & ...
+                    lambda_samples <= lambda_plot_max);
+
+    % If the original spectral sampling is too coarse, keep the nearest
+    % samples around the central wavelength.
+    if isempty(plot_idx)
+        [~, centre_idx] = min(abs(lambda_samples - lambda_c));
+
+        i1 = max(1, centre_idx - 1);
+        i2 = min(length(lambda_samples), centre_idx + 1);
+
+        plot_idx = i1:i2;
+    end
+
+    % Display at most five PSF outlines
+    if length(plot_idx) > 5
+        tmp = round(linspace(1, length(plot_idx), 5));
+        plot_idx = plot_idx(tmp);
+    end
+
+
+    % Original fibre PSFs
+    for j = 1:length(plot_idx)
+
+        i = plot_idx(j);
+
+        rectangle('Position', ...
+            [-r0_values(i)*1e6, ...
+             (y_pos(i) - r0_values(i)*params.anamorphism)*1e6, ...
+             2*r0_values(i)*1e6, ...
+             2*r0_values(i)*params.anamorphism*1e6], ...
+            'Curvature', [1, 1], ...
+            'EdgeColor', 'b', ...
+            'LineWidth', 0.8);
+
+    end
+
+
+    % Neighbouring fibre PSFs
+    for j = 1:length(plot_idx)
+
+        i = plot_idx(j);
+
+        rectangle('Position', ...
+            [key_sep*1e6 - r0_values(i)*1e6, ...
+             (y_pos(i) - r0_values(i)*params.anamorphism)*1e6, ...
+             2*r0_values(i)*1e6, ...
+             2*r0_values(i)*params.anamorphism*1e6], ...
+            'Curvature', [1, 1], ...
+            'EdgeColor', 'g', ...
+            'LineWidth', 0.8);
+
+    end
+
+
+    %% Fibre core outlines
+
+    fibre_radius = params.fibre_radius_detector;
+
+    % Original fibre
+    rectangle('Position', ...
+        [-fibre_radius*1e6, ...
+         -fibre_radius*params.anamorphism*1e6, ...
+         2*fibre_radius*1e6, ...
+         2*fibre_radius*params.anamorphism*1e6], ...
+        'Curvature', [1, 1], ...
+        'EdgeColor', 'b', ...
+        'LineWidth', 1.2, ...
+        'LineStyle', '--');
+
+    % Neighbouring fibre
+    rectangle('Position', ...
+        [key_sep*1e6 - fibre_radius*1e6, ...
+         -fibre_radius*params.anamorphism*1e6, ...
+         2*fibre_radius*1e6, ...
+         2*fibre_radius*params.anamorphism*1e6], ...
+        'Curvature', [1, 1], ...
+        'EdgeColor', 'g', ...
+        'LineWidth', 1.2, ...
+        'LineStyle', '--');
+
+
+    title(sprintf( ...
+        'Dispersed PSF Distribution (%.0f nm window)', ...
+        plot_bandwidth*1e9));
+
+    xlabel('Spatial Direction [\mum]');
+    ylabel('Spectral Direction [\mum]');
+
+
+    %% Full spectral dispersion
+
+    subplot(2, 2, 2);
+
+    plot(lambda_samples*1e9, y_pos*1e6, ...
+        '-', ...
+        'LineWidth', 1.8);
+
+    hold on;
+
+    % Highlight wavelengths displayed in the PSF panel
+    plot(lambda_samples(plot_idx)*1e9, ...
+         y_pos(plot_idx)*1e6, ...
+         'o', ...
+         'MarkerSize', 5, ...
+         'LineWidth', 1.2);
+
+    xlabel('Wavelength [nm]');
+    ylabel('Spectral Position [\mum]');
+    title('Spectral Dispersion');
+
+    grid on;
+    box on;
+
+
+    %% Crosstalk curve
+
     subplot(2, 2, 4);
-    plot(d_steps*1e6, crosstalk*100, 'LineWidth', 2);
-    xline(params.fibre_separation*1e6, 'r--', 'LineWidth', 1.5, ...
-          'Label', sprintf('Design: %.3f%%', crosstalk_pct));
-    xlabel('Fibre Separation [μm]'); ylabel('Crosstalk [%]');
-    title('Crosstalk vs Separation'); grid on;
+
+    plot(d_steps*1e6, crosstalk*100, ...
+        'LineWidth', 2);
+
+    hold on;
+
+    xline(params.fibre_separation*1e6, ...
+        'r--', ...
+        'LineWidth', 1.5, ...
+        'Label', sprintf('Design: %.3f%%', crosstalk_pct));
+
+    xlabel('Fibre Separation [\mum]');
+    ylabel('Crosstalk [%]');
+    title('Crosstalk vs Separation');
+
+    grid on;
+    box on;
+
 end
 
 %% Model Comparison Function
