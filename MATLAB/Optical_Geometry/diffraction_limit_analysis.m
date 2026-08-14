@@ -2,8 +2,8 @@ function [transition_data, performance_metrics] = diffraction_limit_analysis(var
 % DIFFRACTION_LIMIT_ANALYSIS - Determine spectrograph performance transition points
 %
 % Analyzes when a spectrograph transitions from geometric (slit-limited) to
-% diffraction-limited performance. Identifies optimal operating regions and
-% performance boundaries for optical design optimization.
+% diffraction-limited performance. Identifies operating regimes and
+% performance boundaries for optical design.
 %
 % Physical principles:
 % - Geometric resolving power: R_geom = (m·G·λ·F·W) / s1
@@ -97,12 +97,6 @@ else
     max_geometric_R = NaN;
 end
 
-if any(diffraction_limited_mask)
-    min_diffraction_R = min(R_geometric(diffraction_limited_mask));
-else
-    min_diffraction_R = NaN;
-end
-
 if ~isnan(max_geometric_R)
     fprintf('Maximum geometric (slit-limited) R: %.0f\n', max_geometric_R);
 end
@@ -115,7 +109,7 @@ fig = create_performance_plot(lambda, R_geometric, R_diffraction, ...
 %% Performance Optimization Analysis
 % =========================================================================
 % Calculate how changing parameters affects transition point
-optimization_data = analyze_parameter_sensitivity(params, lambda_transition);
+optimization_data = analyze_parameter_sensitivity(params);
 
 %% Prepare Output Structures
 % =========================================================================
@@ -248,7 +242,12 @@ function fig = create_performance_plot(lambda, R_geom, R_diff, lambda_trans, R_t
     
     if ~isnan(lambda_trans)
         param_text{end+1} = sprintf('Transition: %.2f μm', lambda_trans*1e6);
-        max_geom_R = max(R_geom(R_geom < R_diff));
+        geom_values = R_geom(R_geom < R_diff);
+        if isempty(geom_values)
+            max_geom_R = NaN;
+        else
+            max_geom_R = max(geom_values);
+        end
         param_text{end+1} = sprintf('Max geometric R: %.0f', max_geom_R);
     else
         param_text{end+1} = 'Always slit-limited';
@@ -264,12 +263,11 @@ end
 
 %% Parameter Sensitivity Analysis
 % =========================================================================
-function sensitivity_data = analyze_parameter_sensitivity(params, current_transition)
+function sensitivity_data = analyze_parameter_sensitivity(params)
 % ANALYZE_PARAMETER_SENSITIVITY - Analyze how design changes affect transition
 
     lambda_test = linspace(params.wavelength_range(1), params.wavelength_range(2), 500);
-    R_diff_const = params.diffraction_order * params.grating_density * params.beam_size / 1.22;
-    
+
     % Test parameter variations
     param_variations = struct(...
         'slit_width', linspace(params.slit_width * 0.3, params.slit_width * 3, 20), ...
@@ -294,8 +292,12 @@ function sensitivity_data = analyze_parameter_sensitivity(params, current_transi
             R_geom_temp = (temp_params.diffraction_order * temp_params.grating_density .* lambda_test * ...
                           temp_params.f_number * temp_params.beam_size) ./ temp_params.slit_width;
             
+            % Diffraction limit must be recomputed for the varied design
+            R_diff_temp = temp_params.diffraction_order * temp_params.grating_density * ...
+                          temp_params.beam_size / 1.22;
+            
             % Find transition point
-            idx = find(R_geom_temp >= R_diff_const, 1);
+            idx = find(R_geom_temp >= R_diff_temp, 1);
             if ~isempty(idx)
                 transition_points(j) = lambda_test(idx) * 1e6;
             else
@@ -330,25 +332,5 @@ function sensitivity_data = analyze_parameter_sensitivity(params, current_transi
             fprintf('%s sensitivity: %.3f μm per unit change\n', ...
                 param_names{i}, sensitivity_data.(param_names{i}).sensitivity);
         end
-    end
-end
-
-%% Additional Helper Function for Quick Analysis
-% =========================================================================
-function quick_transition_check(grating_density, beam_size, f_number, slit_width)
-% QUICK_TRANSITION_CHECK - Fast analysis for common parameter sets
-    
-    lambda = linspace(0.3e-6, 2.0e-6, 500);
-    
-    R_geom = (1 * grating_density .* lambda * f_number * beam_size) ./ slit_width;
-    R_diff = 1 * grating_density * beam_size / 1.22;
-    
-    transition_idx = find(R_geom >= R_diff, 1);
-    
-    if ~isempty(transition_idx)
-        lambda_trans = lambda(transition_idx);
-        fprintf('Quick analysis: Transition at %.2f μm\n', lambda_trans*1e6);
-    else
-        fprintf('Quick analysis: System remains slit-limited up to 2.0 μm\n');
     end
 end
