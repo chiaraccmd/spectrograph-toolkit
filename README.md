@@ -1,54 +1,77 @@
 # 🔧 Spectrograph Design Toolkit
 
-*A toolkit for astronomical instrumentation development, including spectrograph design, fibre optics analysis, optical performance modelling, Zemax optimization, and experimental spectral data processing.*
+*A MATLAB toolkit for first-order spectrograph design, diffraction and fibre-optics analysis, and experimental spectral characterization.*
 
 ---
 
-## 🚀 Overview
+## Overview
 
-This repository collects MATLAB and Zemax tools developed for the design and analysis of astronomical spectrographs, with particular emphasis on fibre-fed and integral field spectroscopy.
+This repository collects MATLAB tools for the design and analysis of spectrographs, with particular emphasis on astronomical instrumentation, fibre-fed systems, and integral field spectroscopy.
 
-The workflow covers several stages of instrument development:
+The toolkit covers several stages of instrument development:
 
-* first-order spectrograph sizing;
-* geometrical and diffraction-limited performance analysis;
-* fibre-image overlap and crosstalk modelling;
-* Zemax optical optimization;
-* detector data extraction and wavelength calibration;
-* experimental resolving-power measurements.
+- first-order spectrograph sizing and parameter sweeps;
+- multi-band spectrograph design and cross-band camera matching;
+- slit-limited and diffraction-limited performance analysis;
+- detector sampling and spectral coverage;
+- fibre-image overlap and crosstalk modelling;
+- experimental spectrum extraction and wavelength calibration;
+- measured spectral-resolution and peak analysis.
 
-The tools were originally developed during MSc thesis work on an integral field spectrograph for exoplanet science.
+The analytical models are intended primarily for preliminary design, parameter exploration, and physical performance assessment before detailed optical modelling.
 
 ---
 
 ## 🚀 Quick Start
 
-### MATLAB Examples
+Clone the repository and add the MATLAB folders to your path:
 
 ```matlab
-% Multi-band spectrograph parameter analysis
-[optimal_params, analysis_data] = spectrograph_parameter_sweep({'Y','J','H'}, ...
-    'resolving_power', [5000,5000,5000], ...
-    'name', 'MCIFU_5000_950');
+addpath(genpath('MATLAB'));
+```
 
-% Geometrical spectrograph analysis
-[performance_metrics, geometric_params] = spectrograph_geometric_analysis(...
-    'R_Y', 7880, ...
-    's1', 7.3e-6, ...
-    'nPix', 2000, ...
-    'pix', 18e-6);
+The examples below illustrate the main analysis workflows. Additional functions and options are described in the sections that follow.
 
-% Fibre crosstalk analysis
-[crosstalk_results, analysis_data] = fibre_crosstalk_simulator('airy', ...
-    'fibre_separation', 25e-6, ...
-    'wavelength', 1.55e-6);
+### Multi-band spectrograph design
 
-% Geometric-to-diffraction-limited transition
+```matlab
+[matched, data] = multiband_spectrograph_sweep({'Y','J','H'});
+```
+
+The routine evaluates spectrograph parameters over a range of grating densities and performs **cross-band camera matching**.
+
+A reference configuration is selected for one band, and the remaining bands are matched to its camera focal length. The resulting collimator focal lengths, beam sizes, grating densities, and incidence angles can then be inspected to evaluate the compatibility of the different spectral channels.
+
+### Slit-limited spectrograph sweep
+
+```matlab
+[T, best, results] = slit_limited_spectrograph_sweep(...
+    'R_list', 1300:50:1500, ...
+    'grating_densities', 1511e3);
+```
+
+The routine explores candidate slit-limited configurations and evaluates their optical geometry, detector sampling, spectral coverage, and feasibility.
+
+### Diffraction-limit analysis
+
+```matlab
 [transition_data, performance_metrics] = diffraction_limit_analysis(...
     'grating_density', 650e3, ...
     'beam_size', 14.8e-3, ...
     'f_number', 3.57);
 ```
+
+The routine compares slit-limited and diffraction-limited resolving power and identifies the transition between the two regimes.
+
+### Fibre crosstalk analysis
+
+```matlab
+[crosstalk_results, analysis_data] = fibre_crosstalk_simulator('airy', ...
+    'fibre_separation', 25e-6, ...
+    'wavelength', 1.55e-6);
+```
+
+The simulator provides Airy, Gaussian, and wavelength-dependent dispersed PSF models for estimating contamination between neighbouring fibre images.
 
 ---
 
@@ -56,13 +79,12 @@ The tools were originally developed during MSc thesis work on an integral field 
 
 ```text
 spectrograph-toolkit/
-├── 📊 MATLAB/
+├── MATLAB/
 │   ├── Optical_Geometry/
-│   │   ├── spectrograph_parameter_sweep.m
-│   │   ├── spectrograph_geometric_analysis.m
-│   │   ├── diffraction_limit_analysis.m
-│   │   ├── geometric_spectrograph_sweep.m
-│   │   └── geometric_spectrograph_evaluation.m
+│   │   ├── multiband_spectrograph_sweep.m
+│   │   ├── slit_limited_spectrograph_sweep.m
+│   │   ├── diffraction_limited_multiband_analysis.m
+│   │   └── diffraction_limit_analysis.m
 │   │
 │   ├── Fibre_Optics/
 │   │   └── fibre_crosstalk_simulator.m
@@ -74,179 +96,268 @@ spectrograph-toolkit/
 │       ├── measure_spectral_resolution.m
 │       └── integrate_spectral_peak.m
 │
-├── 🔍 Zemax_Templates/
-│   ├── Merit_Functions/
-│   │   ├── collimator_optimization.MF
-│   │   └── spectrograph_optimization.MF
-│   │
-│   └── Macros/
-│       └── glass_substitution_tool.zpl
+├── Examples/
+│   ├── multiband_spectrograph_design.png
+│   ├── diffraction_limit_transition.png
+│   ├── fibre_crosstalk_airy.png
+│   └── experimental_spectrum_calibration.png
 │
-└── 🧪 Examples/
-    ├── airy_psf_example.png
-    ├── spectrograph_transition_example.png
-    └── calibrated_spectrum_example.png
+├── .gitignore
+├── LICENSE
+└── README.md
 ```
 
 ---
 
-## 🧰 Tool Categories
+## 🔭 Spectrograph Design
 
-### ✅ Optical System Analysis
+### Multi-band parameter analysis
 
-* **spectrograph_parameter_sweep.m** — Multi-band spectrograph parameter analysis for Y, J, and H bands, including grating-density matching between spectral channels.
-* **spectrograph_geometric_analysis.m** — First-order analysis of resolving power, detector coverage, diffraction sampling, fibre-image separation, and optical geometry.
-* **geometric_spectrograph_sweep.m** — Explores slit-limited spectrograph configurations over resolving power, slit width, grating density, detector geometry, and optical parameters.
-* **geometric_spectrograph_evaluation.m** — Evaluates dispersion, sampling, detector coverage, and resolving power for a selected geometrical spectrograph configuration.
-* **diffraction_limit_analysis.m** — Compares slit-limited and diffraction-limited resolving power and determines the transition between the two regimes.
+`multiband_spectrograph_sweep.m` explores first-order spectrograph parameters for multiple wavelength bands.
 
----
+For each channel, the routine evaluates quantities such as:
 
-### ✅ Fibre Optics & IFS
+- grating density;
+- Littrow angle;
+- collimator focal length;
+- camera focal length;
+- beam diameter;
+- illuminated grating width.
 
-* **fibre_crosstalk_simulator.m** — Models leakage between neighbouring fibre images using Airy, Gaussian, and dispersed-spectrum PSFs.
-* Includes both continuous and detector pixel-integrated calculations.
-* Supports analysis of fibre separation and PSF evolution with wavelength.
+The cross-band matching procedure uses one band as a reference and searches for configurations in the remaining bands that reproduce its camera focal length.
 
----
+This provides a first-order way to investigate whether multiple spectral channels can share similar camera requirements.
 
-### ✅ Experimental Data Processing
+The remaining optical parameters are resulting design quantities rather than additional matching constraints and should therefore be inspected to assess the overall compatibility of the channels.
 
-* **extract_1d_spectrum.m** — Extracts a one-dimensional spectrum from a raw detector image using spatial-region detection and local background subtraction.
-* **wavelength_calibration.m** — Derives a polynomial wavelength solution from Neon reference lines and evaluates calibration residuals.
-* **apply_wavelength_calibration.m** — Applies a previously determined wavelength calibration to an extracted spectrum.
-* **measure_spectral_resolution.m** — Measures the FWHM of an isolated spectral line and estimates the experimental resolving power.
-* **integrate_spectral_peak.m** — Performs local baseline subtraction and numerical integration of spectral peaks.
+### Slit-limited parameter sweep
 
----
+`slit_limited_spectrograph_sweep.m` explores spectrograph configurations over user-defined ranges of:
 
-### ✅ Zemax Integration
+- resolving power;
+- slit width;
+- grating line density;
+- detector format;
+- Littrow or off-Littrow geometry.
 
-* **collimator_optimization.MF** — Merit function for collimator optimization using focal-length, throughput, and angular-aberration constraints.
-* **spectrograph_optimization.MF** — Merit function for full spectrograph optimization using first-order constraints and RMS spot performance.
-* **glass_substitution_tool.zpl** — ZPL macro for testing alternative optical materials during optimization.
+For every valid configuration, the routine calculates:
 
----
+- incidence and diffraction angles;
+- camera and collimator focal lengths;
+- beam dimensions;
+- slit-image magnification;
+- detector sampling;
+- spectral coverage;
+- slit-limited resolving power.
 
-## 🔬 Design & Analysis Workflow
+Feasibility checks include:
 
-The repository is organized around a typical spectrograph development sequence:
+- full spectral-band diffraction;
+- detector coverage;
+- camera focal-length limits;
+- minimum camera focal ratio.
 
-```text
-Instrument requirements
-        ↓
-First-order parameter sweep
-        ↓
-Geometrical spectrograph sizing
-        ↓
-Zemax optical optimization
-        ↓
-Diffraction and fibre crosstalk analysis
-        ↓
-Experimental detector acquisition
-        ↓
-1D spectral extraction
-        ↓
-Wavelength calibration
-        ↓
-Measured spectral performance
+Valid configurations are returned as a sortable table, with feasible configurations ranked using a simple figure of merit.
+
+### Diffraction-limited multi-band analysis
+
+`diffraction_limited_multiband_analysis.m` evaluates resolving power across multiple spectral bands while distinguishing between geometrical and diffraction-limited performance.
+
+For each wavelength, the physically relevant resolving power is determined by the limiting mechanism:
+
+```math
+R_{\mathrm{eff}}(\lambda)
+=
+\min\left[
+R_{\mathrm{geom}}(\lambda),
+R_{\mathrm{diff}}
+\right]
 ```
 
-The MATLAB models are intended primarily for first-order design studies and parameter exploration.
+The routine therefore shows both the theoretical slit-limited resolving power and the diffraction ceiling, while identifying which one actually determines instrument performance.
 
-Detailed imaging performance should subsequently be evaluated using a complete optical model and, where available, experimental measurements.
+### Diffraction-limit transition analysis
+
+`diffraction_limit_analysis.m` examines the transition between the slit-limited and diffraction-limited regimes.
+
+It is intended for sensitivity studies and for identifying the point at which increasing geometrical resolving power ceases to improve the effective resolution of the instrument.
 
 ---
 
-## 🔭 Spectrograph Models
+## 📐 Spectrograph Models
 
-The analytical calculations use standard relations from geometrical and Fourier optics.
+The analytical calculations use standard first-order relations from geometrical and Fourier optics.
 
-### Grating Geometry
+### Grating geometry
 
-For first-order Littrow operation:
+For diffraction order $m$,
 
-$$
+```math
+m\lambda = d(\sin\alpha + \sin\beta)
+```
+
+where $d$ is the groove spacing, $\alpha$ is the incidence angle, and $\beta$ is the diffraction angle.
+
+For Littrow operation,
+
+```math
+\alpha = \beta
+```
+
+and therefore
+
+```math
 m\lambda = 2d\sin\alpha
-$$
+```
 
-where $d$ is the groove spacing and $\alpha$ is the Littrow angle.
+Using the grating line density $G = 1/d$,
 
-### Geometrical Resolving Power
+```math
+\sin\alpha = \frac{mG\lambda}{2}
+```
 
-The slit-limited resolving power is evaluated from the projected slit width and spectrograph geometry.
+### Angular dispersion
 
-The general model used in the toolkit is:
+Differentiating the grating equation gives
 
-$$
-R_{\mathrm{geom}} = \frac{mG\lambda F W}{s}
-$$
+```math
+\frac{d\beta}{d\lambda}
+=
+\frac{mG}{\cos\beta}
+```
+
+For a camera of focal length $f_2$, the local linear wavelength dispersion is
+
+```math
+\frac{d\lambda}{dx}
+=
+\frac{\cos\beta}{mGf_2}
+```
+
+This relation is used for detector sampling and first-order spectral-coverage calculations.
+
+### Slit-limited resolving power
+
+The geometrical resolving power used in the toolkit is
+
+```math
+R_{\mathrm{geom}}
+=
+\frac{mG\lambda F W}{s}
+```
 
 where:
 
 - $m$ is the diffraction order;
 - $G$ is the grating line density;
+- $\lambda$ is the wavelength;
 - $F$ is the relevant focal ratio;
 - $W$ is the illuminated grating width;
-- $s$ is the slit width.
+- $s$ is the entrance-slit width.
 
-### Diffraction-Limited Resolving Power
+For fixed spectrograph geometry,
 
-The diffraction limit is estimated using the Airy-disk criterion:
+```math
+R_{\mathrm{geom}} \propto \lambda
+```
 
-$$
-R_{\mathrm{diff}} = \frac{mGW}{1.22}
-$$
+### Diffraction-limited resolving power
 
-The transition between slit-limited and diffraction-limited behaviour occurs when:
+Using the Airy-disk criterion adopted in the toolkit,
 
-$$
-R_{\mathrm{geom}} = R_{\mathrm{diff}}
-$$
+```math
+R_{\mathrm{diff}}
+=
+\frac{mGW}{1.22}
+```
+
+For fixed grating illumination, the diffraction-limited resolving power is independent of wavelength.
+
+The transition between the two regimes occurs when
+
+```math
+R_{\mathrm{geom}}
+=
+R_{\mathrm{diff}}
+```
+
+The effective resolving power is therefore
+
+```math
+R_{\mathrm{eff}}
+=
+\min\left(
+R_{\mathrm{geom}},
+R_{\mathrm{diff}}
+\right)
+```
+
+This distinction is important when interpreting a calculated geometrical resolving power: once $R_{\mathrm{geom}}$ exceeds $R_{\mathrm{diff}}$, diffraction rather than the slit determines the effective spectral resolution.
 
 ---
 
 ## 🔍 Detector Sampling & Spectral Coverage
 
-Detector sampling is evaluated from the wavelength dispersion and projected slit or PSF size.
+Detector sampling is evaluated from the local wavelength dispersion and the projected slit or PSF size.
 
-The local wavelength dispersion is derived from the grating equation and camera focal length.
+For a spectral resolution element,
 
-The tools evaluate:
+```math
+\Delta\lambda
+=
+\frac{\lambda}{R}
+```
+
+The corresponding number of detector pixels per resolution element is
+
+```math
+N_{\mathrm{pix,res}}
+=
+\frac{\Delta\lambda}
+{\left(\frac{d\lambda}{dx}\right)p}
+```
+
+where $p$ is the detector pixel pitch.
+
+The toolkit evaluates:
 
 - wavelength coverage on the detector;
-- number of detector pixels required;
+- detector pixels required by the spectrum;
 - pixels per resolution element;
-- resolving power as a function of wavelength;
-- spectral extent across the focal plane.
+- spectral extent across the focal plane;
+- resolving power as a function of wavelength.
 
-These calculations can be used to compare detector formats and grating configurations during preliminary design.
+For broad wavelength ranges, the focal-plane extent can also be evaluated from the wavelength-dependent diffraction angles rather than assuming constant dispersion across the full detector.
 
 ---
 
 ## 🌈 Fibre Crosstalk Modelling
 
-The fibre-analysis routine estimates contamination between neighbouring fibre spectra using several PSF models.
+`fibre_crosstalk_simulator.m` estimates contamination between neighbouring fibre images at the detector.
 
 Supported models include:
 
 - Airy PSF;
 - Gaussian PSF;
-- dispersed spectral PSF.
+- wavelength-dependent dispersed PSF.
 
-For each model, crosstalk is estimated from the fraction of the source PSF falling inside a neighbouring extraction region.
+For each model, crosstalk is estimated from the fraction of the source PSF falling within a neighbouring extraction region.
 
-Detector effects can also be included through pixel integration.
+Detector pixel integration can also be included, allowing the continuous optical PSF and detector-sampled response to be compared.
 
-The analysis is intended as a first-order estimate of fibre-image leakage and extraction overlap rather than a complete detector or extraction-pipeline simulation.
+The Airy analysis additionally visualizes the projected fibre-core region relative to the diffraction pattern.
+
+The dispersed model extends the analysis across wavelength, allowing wavelength-dependent PSF displacement and overlap to be investigated.
+
+The simulator is intended as a first-order estimate of fibre-image leakage and extraction overlap rather than a complete detector or spectral-extraction simulation.
 
 ---
 
 ## 🧪 Experimental Spectral Analysis
 
-The experimental routines connect the analytical design to measurements from a real detector.
+The `Data_Processing` folder contains reusable functions for experimental spectrograph characterization.
 
-A typical reduction sequence is:
+A typical processing sequence is:
 
 ```text
 raw detector image
@@ -262,109 +373,118 @@ measure_spectral_resolution.m
 integrate_spectral_peak.m
 ```
 
+The individual functions can also be used independently.
+
 ### Spectrum extraction
 
-The detector image is reduced by:
+`extract_1d_spectrum.m` converts a two-dimensional detector image into a one-dimensional spectrum.
 
-1. identifying the illuminated spatial region;
-2. selecting a nearby dark region;
-3. estimating the column-dependent background;
-4. subtracting the background;
-5. integrating the signal along the spatial direction.
+The routine can:
 
-### Wavelength Calibration
+1. identify the illuminated spatial region;
+2. select a nearby background region;
+3. estimate the column-dependent detector background;
+4. subtract the background;
+5. integrate the signal along the spatial direction.
 
-Detected Neon emission lines are matched to known reference wavelengths.
+Both slit-like and compact input geometries can be analysed.
 
-A polynomial relation
+### Wavelength calibration
 
-$$
+`wavelength_calibration.m` derives a polynomial mapping between detector position and wavelength:
+
+```math
 \lambda = \lambda(x)
-$$
+```
 
-is fitted between detector pixel coordinate $x$ and wavelength.
+Reference emission lines are matched to measured detector peaks and fitted with a polynomial wavelength solution.
 
-Calibration quality is evaluated through:
+Calibration diagnostics include:
 
-- RMS residual in nanometres;
-- RMS residual in detector pixels;
-- maximum wavelength residual;
+- wavelength residuals;
+- RMS calibration residual;
+- maximum residual;
 - local spectral dispersion.
 
-### Experimental Resolving Power
+### Calibration application
 
-For an isolated spectral line, the measured resolving power is estimated from:
+`apply_wavelength_calibration.m` applies a previously derived calibration polynomial to an extracted spectrum.
 
-$$
-R = \frac{\lambda_0}{\Delta\lambda_{\mathrm{FWHM}}}
-$$
+This separates calibration generation from calibration application, allowing a wavelength solution to be reused for compatible measurements.
 
-where $\lambda_0$ is the measured line centre and $\Delta\lambda_{\mathrm{FWHM}}$ is its full width at half maximum.
+### Experimental resolving power
 
-This allows direct comparison between analytical predictions and experimental performance.
+`measure_spectral_resolution.m` estimates the width of an isolated spectral line and its corresponding experimental resolving power.
+
+For a measured line centred at $\lambda_0$,
+
+```math
+R
+=
+\frac{\lambda_0}
+{\Delta\lambda_{\mathrm{FWHM}}}
+```
+
+where $\Delta\lambda_{\mathrm{FWHM}}$ is the measured full width at half maximum.
+
+This provides an experimental performance metric that can be compared directly with analytical resolving-power predictions.
+
+### Peak integration
+
+`integrate_spectral_peak.m` performs local baseline estimation and numerical integration of an isolated spectral feature.
+
+After baseline subtraction, the integrated signal is evaluated as
+
+```math
+A
+=
+\int_{x_1}^{x_2}
+\left[
+I(x)-I_{\mathrm{base}}(x)
+\right]\,dx
+```
+
+with the numerical integral evaluated using the trapezoidal rule.
 
 ---
 
-## 🔍 Zemax Optimization
+## 📊 Examples
 
-The Zemax merit functions complement the MATLAB first-order calculations.
+The `Examples/` folder contains representative outputs from the different analysis stages:
 
-### Collimator optimization
+- `multiband_spectrograph_design.png` — cross-band camera-matching example;
+- `diffraction_limit_transition.png` — transition between slit-limited and diffraction-limited resolving power;
+- `fibre_crosstalk_airy.png` — Airy PSF and fibre-core geometry;
+- `experimental_spectrum_calibration.png` — example wavelength-calibration workflow.
 
-The collimator merit function includes:
-
-* effective focal-length constraints;
-* throughput constraints;
-* angular aberration minimization.
-
-Angular aberration operands are used because the main objective of the collimator is to produce a well-collimated output beam.
-
-### Spectrograph optimization
-
-The full spectrograph merit function includes:
-
-* subsystem focal-length constraints;
-* throughput requirements;
-* RMS transverse aberration optimization at the detector plane.
-
-This allows the first-order geometry obtained in MATLAB to be refined using full ray tracing.
-
----
-
-## 📊 Example Applications
-
-The toolkit can be used for:
-
-* astronomical spectrograph sizing;
-* integral field spectrograph design;
-* fibre-fed spectroscopy;
-* detector selection and sampling analysis;
-* diffraction-performance budgeting;
-* fibre-crosstalk estimation;
-* Zemax optimization;
-* laboratory spectrograph characterization;
-* wavelength calibration and spectral-resolution measurements.
+The example outputs use generalized or synthetic parameters and are intended to demonstrate the analysis routines rather than reproduce a specific instrument configuration.
 
 ---
 
 ## 🔄 Planned Extensions
 
-* **VPH Grating Design** — Efficiency calculations and Bragg-condition optimization.
-* **Tolerance Analysis** — Sensitivity to manufacturing and alignment errors.
-* **Additional Zemax Tools** — Multi-configuration and automated optimization utilities.
+Possible future extensions include:
+
+- VPH grating efficiency and Bragg-condition modelling;
+- optical tolerance and sensitivity analysis;
+- Zemax macros and functions.
 
 ---
 
 ## 📝 License
 
-This toolkit is available under the **MIT License** for academic and research use.
+This project is licensed under the **MIT License** for academic and research use.
 
-See the `LICENSE` file for details.
+See [`LICENSE`](LICENSE) for details.
 
 ---
 
-## 📚 Background
+## Background
 
-The tools in this repository were developed during MSc thesis work on:
+The toolkit originated from MSc thesis work on:
 
-**“Development of an Integral Field Spectrograph for Exoplanet Science”** at **Politecnico di Milano** and **INAF – Osservatorio Astronomico di Brera**.
+**“Development of an Integral Field Spectrograph for Exoplanet Science”**
+
+at **Politecnico di Milano** and **INAF – Osservatorio Astronomico di Brera**.
+
+The repository has subsequently been reorganized into reusable functions for spectrograph design, fibre-optics analysis, and experimental spectral characterization.
